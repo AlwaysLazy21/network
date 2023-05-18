@@ -122,30 +122,55 @@
 
    ![image-20230422224932009](./assets/image-20230422224932009.png)
 
-2. 依次在中间两层的交换机中创建vlan10、vlan20，将PC8、PC10连接的端口划分到vlan10,将PC9、PC11连接的端口划分到vlan20,将交换机互联的端口更改为trunk模式
+2. 更改中间两个交换机的设置（两个交换机同样设置）
 
    ```powershell
    Switch>enable
+   Switch#hostname $(name)							!修改主机名程
    Switch#configure t
    Switch(config)#interface fastethernet 0/1		!进入接口配置模式
    Switch(config-if)#switchport mode access
-   Switch(config-if)#switchport access vlan 10   	!将f0/1端口加入vlan 10中
+   Switch(config-if)#switchport access vlan 17   	!将f0/1端口加入vlan 10中
    Switch(config)#interface fastethernet 0/2   	!进入f0/2的接口配置模式
    Switch(config-if)#switchport mode access
-   Switch(config-if)#switchport access vlan 20    	!将f0/2端口加入vlan 20中
+   Switch(config-if)#switchport access vlan 27    	!将f0/2端口加入vlan 20中
    Switch(config)#interface fastethernet 0/10   	!进入f0/10的接口配置模式
    Switch(config-if)#switchport mode trunk
    ```
 
-   
-   
-3. 通过ping命令测试主机间连通性
+3. 设置最上面的交换机
 
-   - 内连通性
+   ```powershell
+   Switch(config)#hostname SW1       /*修改主机名为姓名拼音+SW1
+   SW1(config)#vlan 17               /*vlan-id为学号后2位+10
+   SW1(config-vlan)#exit
+   SW1(config)#vlan 27               /*vlan-id为学号后2位+20
+   SW1(config-vlan)#exit
+   SW1(config)#interface f0/1
+   SW1(config-if)#switchport trunk encapsulation dot1q             ！封装模式为dot1q
+   SW1(config-if)#switchport mode trunk 
+   SW1(config-if)#exit
+   SW1(config)#interface f0/2
+   SW1(config-if)#switchport trunk encapsulation dot1q             ！封装模式为dot1q
+   SW1(config-if)#switchport mode trunk 
+   SW1(config)#ip routing
+   创建vlan接口vlan17和vlan27，并配置IP地址
+   SW1(config)#interface vlan 17   /*vlan-id为学号后2位+10
+   SW1(config-if)#ip address 192.168.107.254 255.255.255.0	/*IP地址的第3个字节修改为学号后2位
+   SW1(config-if)#no shutdown 
+   SW1(config-if)#exit 
+   SW1(config)#interface vlan 27  	/*vlan-id为学号后2位+20
+   SW1(config-if)#ip address 192.168.207.254 255.255.255.0	/*IP地址的第3个字节修改为学号后2位
+   SW1(config-if)#no shutdown 
+   ```
 
-     
+4. 在第一台主机通过ping命令测试主机间连通性
 
-   - 间连通性
+   ![image-20230426204801994](./assets/image-20230426204801994.png)
+
+   ![image-20230426204814337](./assets/image-20230426204814337.png)
+
+   ![image-20230426204837960](./assets/image-20230426204837960.png)
 
 ## 实验结果分析（实验原理）
 
@@ -153,11 +178,55 @@
 
 抓包分析VLAN间通信时，数据包是如何变化的（从IP地址、MAC地址、MAC帧的格式等方面描述），即分析VLAN打标签和去标签的过程。
 
+VLAN（Virtual Local Area Network）是一种将单个物理网络划分成多个逻辑网络的技术，可以提供更好的网络管理和安全性。在进行VLAN间通信时，数据包会经历以下变化：
 
+1. VLAN打标签（Tagging）
+
+当一个数据包从一个VLAN传输到另一个VLAN时，需要先将数据包打上标记（Tag），以便接收方知道这个数据包是来自哪个VLAN的。常用的VLAN标记协议有IEEE 802.1Q和Cisco的ISL。在IEEE 802.1Q标准下，一个VLAN标记包含4个字节，其中前两个字节是TPID（Tag Protocol Identifier），指示这是一个VLAN标记数据包；后两个字节是TCI（Tag Control Information），包括VLAN ID、优先级等信息。
+
+2. 数据包头部修改
+
+在打上VLAN标记后，数据包的头部会发生如下变化：
+
+- MAC地址：由于VLAN是基于MAC地址的，所以源MAC地址和目的MAC地址不会改变。但是，在IEEE 802.1Q标准下，一个VLAN标记数据包的目的MAC地址必须是特殊的值0x01-00-5E-00-00-00，因为此时目的地址的低23位会被解释为Multicast Group ID，用于指定目的VLAN。
+- IP地址：如果数据包中包含IP地址，则与MAC地址类似，源IP地址和目的IP地址也不会改变。
+- MAC帧格式：在打上VLAN标记后，数据包的MAC帧格式会发生变化。具体来说，新增了一个4字节长的VLAN Tag字段，将原来的Type/Length字段替换掉。
+
+3. VLAN去标签（Untagging）
+
+当一个数据包从VLAN传输到非VLAN网络时，需要先将数据包的标记去除，以便接收方能够正确解析数据包。在IEEE 802.1Q标准下，可以使用特殊的VLAN ID值4095表示未打标记的数据包，这种数据包称为native VLAN。去标签的过程与打标签的过程相反，即将VLAN Tag字段删除，恢复原来的Type/Length字段，并把目的MAC地址修改回真实的值。
+
+总的来说，VLAN的打标签和去标签过程是为了将多个逻辑网络划分在同一物理网络中，以提高网络管理和安全性，并且通过对数据包进行加标记和去标记，使得数据包能够在不同的VLAN之间进行传输。
 
 #### Access和Trunk
 
  
+
+1. 端口类型不同
+
+Access端口是指连接到单个VLAN的端口，只能传输属于该VLAN的数据。通常用于连接主机、服务器或其他单一设备。
+
+Trunk端口是指连接到多个VLAN的端口，可以传输所有VLAN的数据。通常用于连接交换机和路由器等设备，用于实现VLAN间的互联。
+
+2. VLAN标记不同
+
+Access端口上的数据包通常不打上VLAN标记，因为这些数据包都属于相同的VLAN，不需要进行区分。
+
+Trunk端口上的数据包则需要打上VLAN标记，以便接收方知道这个数据包是来自哪个VLAN。
+
+3. 数据包转发方式不同
+
+Access端口只能转发其所属的VLAN中的数据包，而且不会在数据包中添加任何VLAN信息。
+
+Trunk端口可以同时转发多个VLAN中的数据包，并在数据包中打上相应的VLAN标记，以便接收方正确解析数据包。
+
+4. 速率限制不同
+
+Access端口通常没有速率限制，因为它只连接一个单一设备。
+
+Trunk端口则可能需要设置带宽限制和优先级控制，以确保各个VLAN的数据流量得到合理的分配和管理。
+
+综上所述，Access端口和Trunk端口在端口类型、VLAN标记、数据包转发方式和速率限制等方面存在差异，这些差异使得它们适用于不同的网络环境和应用场景。
 
 ## 回答问题
 
